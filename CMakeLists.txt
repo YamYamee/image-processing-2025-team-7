@@ -1,0 +1,30 @@
+cmake_minimum_required(VERSION 3.10)
+project(color_palette_extractor LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+find_package(OpenCV QUIET)
+
+if(NOT OpenCV_FOUND)
+	find_package(PkgConfig QUIET)
+	if(PkgConfig_FOUND)
+		pkg_check_modules(OPENCV QUIET opencv4 opencv)
+		if(OPENCV_FOUND)
+			message(STATUS "Found OpenCV via pkg-config")
+			include_directories(${OPENCV_INCLUDE_DIRS})
+			link_directories(${OPENCV_LIBRARY_DIRS})
+			set(OpenCV_LIBS ${OPENCV_LIBRARIES})
+			set(OpenCV_INCLUDE_DIRS ${OPENCV_INCLUDE_DIRS})
+			set(OpenCV_FOUND TRUE)
+		endif()
+	endif()
+endif()
+
+if(NOT OpenCV_FOUND)
+	message(FATAL_ERROR "OpenCV not found. Install OpenCV development files or set OpenCV_DIR. Example (Ubuntu): sudo apt install libopencv-dev")
+endif()
+
+add_executable(color_palette_extractor src/main.cpp)
+target_include_directories(color_palette_extractor PRIVATE ${OpenCV_INCLUDE_DIRS})
+target_link_libraries(color_palette_extractor PRIVATE ${OpenCV_LIBS})
