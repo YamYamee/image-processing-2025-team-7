@@ -7,14 +7,16 @@
 #include <random>
 #include <cmath>
 
-static std::string toHex(const cv::Vec3b &bgr) {
+static std::string toHex(const cv::Vec3b &bgr)
+{
     char buffer[8];
 
     sprintf(buffer, "#%02X%02X%02X", bgr[2], bgr[1], bgr[0]);
     return std::string(buffer);
 }
 
-static cv::Vec3b bgrToHsv(const cv::Vec3b &bgr) {
+static cv::Vec3b bgrToHsv(const cv::Vec3b &bgr)
+{
     cv::Mat bgrMat(1,1,CV_8UC3, cv::Scalar(bgr[0], bgr[1], bgr[2]));
     cv::Mat hsvMat;
     cv::cvtColor(bgrMat, hsvMat, cv::COLOR_BGR2HSV);
@@ -22,7 +24,8 @@ static cv::Vec3b bgrToHsv(const cv::Vec3b &bgr) {
     return hsv;
 }
 
-static cv::Vec3b hsvToBgr(const cv::Vec3b &hsv) {
+static cv::Vec3b hsvToBgr(const cv::Vec3b &hsv)
+{
     cv::Mat hsvMat(1,1,CV_8UC3, cv::Scalar(hsv[0], hsv[1], hsv[2]));
     cv::Mat bgrMat;
     cv::cvtColor(hsvMat, bgrMat, cv::COLOR_HSV2BGR);
@@ -30,11 +33,13 @@ static cv::Vec3b hsvToBgr(const cv::Vec3b &hsv) {
     return bgr;
 }
 
-static cv::Vec3b shiftHue(const cv::Vec3b &bgr, int dh, int dv = 0, int ds = 0) {
+static cv::Vec3b shiftHue(const cv::Vec3b &bgr, int dh, int dv = 0, int ds = 0)
+{
     cv::Vec3b hsv = bgrToHsv(bgr);
     int h = hsv[0];
     int s = hsv[1];
     int v = hsv[2];
+
     h = (h + dh) % 180; if (h<0) h+=180;
     s = std::clamp(s + ds, 0, 255);
     v = std::clamp(v + dv, 0, 255);
@@ -101,7 +106,8 @@ static void buildSamples(const cv::Mat &procImg, cv::Mat &samples, std::vector<c
         for (int y = 0; y < foregroundMask.rows; ++y) {
             const uchar* row = foregroundMask.ptr<uchar>(y);
             for (int x = 0; x < foregroundMask.cols; ++x) {
-                if (row[x]) fgPts.emplace_back(x, y);
+                if (row[x])
+                    fgPts.emplace_back(x, y);
             }
         }
     }
@@ -191,15 +197,17 @@ static cv::Vec3b selectDominant(const cv::Mat &centers, const cv::Mat &labels, c
     return c;
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     if (argc < 2) {
-        std::cerr << "Usage: ./" << argv[0] << " <image_path> <number of colors(default 4)>" << std::endl;
+        std::cerr << "Usage: ./" << argv[0] << " <image_path> <number of clusters(default 4)>" << std::endl;
         return 1;
     }
 
     std::string path = argv[1];
     int clusters_nb = 4;
-    if (argc >= 3) clusters_nb = std::stoi(argv[2]);
+    if (argc >= 3)
+        clusters_nb = std::stoi(argv[2]);
 
     cv::Mat img, procImg;
     if (!loadAndPreprocess(path, img, procImg)) {
