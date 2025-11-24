@@ -1,30 +1,41 @@
-cmake_minimum_required(VERSION 3.10)
-project(color_palette_extractor LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.16)
+project(SmartEyeDropper LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(OpenCV QUIET)
-
-if(NOT OpenCV_FOUND)
-	find_package(PkgConfig QUIET)
-	if(PkgConfig_FOUND)
-		pkg_check_modules(OPENCV QUIET opencv4 opencv)
-		if(OPENCV_FOUND)
-			message(STATUS "Found OpenCV via pkg-config")
-			include_directories(${OPENCV_INCLUDE_DIRS})
-			link_directories(${OPENCV_LIBRARY_DIRS})
-			set(OpenCV_LIBS ${OPENCV_LIBRARIES})
-			set(OpenCV_INCLUDE_DIRS ${OPENCV_INCLUDE_DIRS})
-			set(OpenCV_FOUND TRUE)
-		endif()
-	endif()
+# =========================================================
+# 1. OS-specific OpenCV Path Configuration
+# =========================================================
+if(WIN32)
+    # Windows: Set user-specific path (Keep your local path)
+    set(OpenCV_DIR "C:/Users/cartc/Downloads/opencv/build")
+else()
+    # Linux: Usually installed in system paths, so manual path setting is often unnecessary.
+    # (If needed, you can add set(OpenCV_DIR "/usr/local/share/opencv4") here)
 endif()
 
-if(NOT OpenCV_FOUND)
-	message(FATAL_ERROR "OpenCV not found. Install OpenCV development files or set OpenCV_DIR. Example (Ubuntu): sudo apt install libopencv-dev")
-endif()
+# Find OpenCV package (Common)
+find_package(OpenCV REQUIRED)
 
-add_executable(color_palette_extractor src/main.cpp)
-target_include_directories(color_palette_extractor PRIVATE ${OpenCV_INCLUDE_DIRS})
-target_link_libraries(color_palette_extractor PRIVATE ${OpenCV_LIBS})
+# =========================================================
+# 2. Register Executable and Source Code
+# =========================================================
+add_executable(SmartEyeDropper
+    src/main.cpp
+    src/ImageProcessor.h
+    src/ImageProcessor.cpp
+    src/PaletteMatcher.h
+    src/PaletteMatcher.cpp
+)
+
+# =========================================================
+# 3. OS-specific Library Linking
+# =========================================================
+if(WIN32)
+    # Windows: Link OpenCV + Comdlg32 (For file explorer dialog)
+    target_link_libraries(SmartEyeDropper PRIVATE ${OpenCV_LIBS} Comdlg32)
+else()
+    # Linux: Link OpenCV only (File explorer logic handles differently or is excluded)
+    target_link_libraries(SmartEyeDropper PRIVATE ${OpenCV_LIBS})
+endif()

@@ -1,245 +1,169 @@
-#include <opencv2/opencv.hpp>
+#define CVUI_IMPLEMENTATION
+#include "cvui.h"
+
 #include <iostream>
-#include <vector>
-#include <string>
-#include <sstream>
-#include <algorithm>
-#include <random>
-#include <cmath>
+#include <cstdio>
+#include "ImageProcessor.h"
+#include "PaletteMatcher.h"
 
-static std::string toHex(const cv::Vec3b &bgr)
-{
-    char buffer[8];
+#define NOMINMAX
+#include <windows.h>
+#include <commdlg.h>
 
-    sprintf(buffer, "#%02X%02X%02X", bgr[2], bgr[1], bgr[0]);
-    return std::string(buffer);
+std::string OpenFileDialog() {
+    OPENFILENAMEA ofn;
+    char szFile[260] = { 0 };
+    ZeroMemory(&ofn, sizeof(ofn));
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = NULL;
+    ofn.lpstrFile = szFile;
+    ofn.nMaxFile = sizeof(szFile);
+    ofn.lpstrFilter = "Image Files\0*.jpg;*.png;*.bmp;*.jpeg\0All Files\0*.*\0";
+    ofn.nFilterIndex = 1;
+    ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+    if (GetOpenFileNameA(&ofn) == TRUE) return std::string(ofn.lpstrFile);
+    return "";
 }
 
-static cv::Vec3b bgrToHsv(const cv::Vec3b &bgr)
-{
-    cv::Mat bgrMat(1,1,CV_8UC3, cv::Scalar(bgr[0], bgr[1], bgr[2]));
-    cv::Mat hsvMat;
-    cv::cvtColor(bgrMat, hsvMat, cv::COLOR_BGR2HSV);
-    cv::Vec3b hsv = hsvMat.at<cv::Vec3b>(0,0);
-    return hsv;
+std::string bgrToHex(const cv::Vec3b& color) {
+    char hex[8];
+    sprintf(hex, "#%02X%02X%02X", color[2], color[1], color[0]);
+    return std::string(hex);
 }
 
-static cv::Vec3b hsvToBgr(const cv::Vec3b &hsv)
-{
-    cv::Mat hsvMat(1,1,CV_8UC3, cv::Scalar(hsv[0], hsv[1], hsv[2]));
-    cv::Mat bgrMat;
-    cv::cvtColor(hsvMat, bgrMat, cv::COLOR_HSV2BGR);
-    cv::Vec3b bgr = bgrMat.at<cv::Vec3b>(0,0);
-    return bgr;
-}
+#define WINDOW_NAME "Team 7 - Smart Eye Dropper"
+#define PANEL_WIDTH 320
 
-static cv::Vec3b shiftHue(const cv::Vec3b &bgr, int dh, int dv = 0, int ds = 0)
-{
-    cv::Vec3b hsv = bgrToHsv(bgr);
-    int h = hsv[0];
-    int s = hsv[1];
-    int v = hsv[2];
+int main(int argc, char** argv) {
+    cv::Mat frame = cv::Mat(700, 800 + PANEL_WIDTH, CV_8UC3); // Increased height slightly
+    cvui::init(WINDOW_NAME);
 
-    h = (h + dh) % 180; if (h<0) h+=180;
-    s = std::clamp(s + ds, 0, 255);
-    v = std::clamp(v + dv, 0, 255);
-    cv::Vec3b newhsv(h, s, v);
-    return hsvToBgr(newhsv);
-}
+    ImageProcessor processor;
+    PaletteMatcher matcher;
 
-static void checkDuplication(const std::vector<cv::Vec3b> &palette, std::vector<std::string> &hexes)
-{
-    for (auto &c : palette) {
-        std::string h = toHex(c);
-        if (std::find(hexes.begin(), hexes.end(), h) == hexes.end())
-            hexes.push_back(h);
-    }
-}
+    std::string currentTheme = "Fashion";
+    bool imageLoaded = false;
+    int kClusters = 5;
 
-static void printResults(std::vector<std::string> hexes)
-{
-    std::cout << "palette=";
-    for (std::size_t i = 0; i < hexes.size(); ++i) {
-        std::cout << hexes[i];
-        if (i+1 < hexes.size())
-            std::cout << ",";
-    }
-    std::cout << std::endl;
-}
+    // [Modified] Store a list of colors
+    std::vector<cv::Vec3b> extractedColors;
+    ThemePalette recommended;
+    cv::Mat displayImg;
 
-static bool loadAndPreprocess(const std::string &path, cv::Mat &img, cv::Mat &procImg, int maxDim = 600)
-{
-    img = cv::imread(path, cv::IMREAD_COLOR);
-    if (img.empty()) return false;
-    procImg = img;
-    if (std::max(img.cols, img.rows) > maxDim) {
-        double scale = (double)maxDim / (double)std::max(img.cols, img.rows);
-        cv::resize(img, procImg, cv::Size(), scale, scale, cv::INTER_AREA);
-        std::cerr << "Downscaled image for processing: " << procImg.cols << "x" << procImg.rows << std::endl;
-    }
-    return true;
-}
+    while (true) {
+        frame = cv::Scalar(245, 245, 245);
 
-static void buildSamples(const cv::Mat &procImg, cv::Mat &samples, std::vector<cv::Point> &samplePts, std::size_t maxSamples = 20000)
-{
-    cv::Mat gcMask(procImg.size(), CV_8UC1, cv::Scalar(cv::GC_PR_BGD));
-    cv::Mat bgModel, fgModel;
-    int rectW = std::max(1, procImg.cols * 8 / 10);
-    int rectH = std::max(1, procImg.rows * 8 / 10);
-    int rectX = (procImg.cols - rectW) / 2;
-    int rectY = (procImg.rows - rectH) / 2;
-    cv::Rect rect(rectX, rectY, rectW, rectH);
+        // --- LEFT PANEL ---
+        cvui::rect(frame, 0, 0, PANEL_WIDTH, 700, 0x333333, 0x333333);
 
-    try {
-        cv::grabCut(procImg, gcMask, rect, bgModel, fgModel, 3, cv::GC_INIT_WITH_RECT);
-    } catch (const cv::Exception &e) {
-        gcMask.release();
-    }
+        int y = 25;
+        cvui::text(frame, 20, y, "Smart Eye-Dropper", 0.9, 0xFFFFFF);
+        y += 50;
 
-    cv::Mat foregroundMask;
-    if (!gcMask.empty())
-        foregroundMask = (gcMask == cv::GC_FGD) | (gcMask == cv::GC_PR_FGD);
+        // 1. Theme
+        cvui::text(frame, 20, y, "1. Select Theme", 0.6, 0xDDDDDD);
+        y += 30;
+        if (cvui::button(frame, 20, y, 280, 40, "Fashion")) currentTheme = "Fashion";
+        y += 45;
+        if (cvui::button(frame, 20, y, 280, 40, "Interior")) currentTheme = "Interior";
+        y += 45;
+        if (cvui::button(frame, 20, y, 280, 40, "Design")) currentTheme = "Design";
+        y += 40;
+        cvui::printf(frame, 20, y, 0.5, 0x00FF00, "Current: %s", currentTheme.c_str());
+        y += 40;
 
-    std::vector<cv::Point> fgPts;
-    if (!foregroundMask.empty()) {
-        fgPts.reserve(foregroundMask.rows * foregroundMask.cols / 8);
-        for (int y = 0; y < foregroundMask.rows; ++y) {
-            const uchar* row = foregroundMask.ptr<uchar>(y);
-            for (int x = 0; x < foregroundMask.cols; ++x) {
-                if (row[x])
-                    fgPts.emplace_back(x, y);
+        // 2. K-Means Settings
+        cvui::text(frame, 20, y, "2. Settings", 0.6, 0xDDDDDD);
+        y += 25;
+        cvui::text(frame, 20, y, "Clusters (K):", 0.4, 0xAAAAAA);
+        cvui::trackbar(frame, 120, y - 10, 160, &kClusters, 1, 10);
+        y += 45;
+
+        // 3. Upload
+        cvui::text(frame, 20, y, "3. Upload Image", 0.6, 0xDDDDDD);
+        y += 30;
+        if (cvui::button(frame, 20, y, 280, 50, "Open Image File")) {
+            std::string path = OpenFileDialog();
+            if (!path.empty() && processor.load(path)) {
+                imageLoaded = true;
+
+                // [Modified] Extract list of colors
+                extractedColors = processor.extractDominantColors(kClusters);
+
+                displayImg = processor.getProcessedImage().clone();
+                double scale = 800.0 / displayImg.cols;
+                if (displayImg.rows * scale > 600) scale = 600.0 / displayImg.rows;
+                cv::resize(displayImg, displayImg, cv::Size(), scale, scale);
             }
         }
-    }
+        y += 60;
 
-    if (fgPts.size() >= 50) {
-        std::vector<std::size_t> indices(fgPts.size());
-        for (std::size_t i = 0; i < fgPts.size(); ++i) indices[i] = i;
-        if (fgPts.size() > maxSamples) {
-            std::shuffle(indices.begin(), indices.end(), std::mt19937{std::random_device{}()});
-            indices.resize(maxSamples);
+        if (imageLoaded) {
+            if (cvui::button(frame, 20, y, 280, 40, "Re-analyze (K)")) {
+                // [Modified] Re-extract list
+                extractedColors = processor.extractDominantColors(kClusters);
+            }
         }
 
-        samples.create((int)indices.size(), 3, CV_32F);
-        samplePts.reserve(indices.size());
-        for (std::size_t i = 0; i < indices.size(); ++i) {
-            cv::Point p = fgPts[indices[i]];
-            samplePts.emplace_back(p);
-            cv::Vec3b pix = procImg.at<cv::Vec3b>(p.y, p.x);
-            samples.at<float>((int)i, 0) = pix[0];
-            samples.at<float>((int)i, 1) = pix[1];
-            samples.at<float>((int)i, 2) = pix[2];
+        // --- RIGHT PANEL ---
+        if (imageLoaded) {
+            cvui::image(frame, PANEL_WIDTH, 0, displayImg);
+
+            // Use the most dominant color (index 0) for recommendation
+            if (!extractedColors.empty()) {
+                recommended = matcher.recommendPalette(currentTheme, extractedColors[0]);
+            }
+
+            int resultX = PANEL_WIDTH + 20;
+            int resultY = 20;
+
+            // Background box for results
+            cvui::rect(frame, resultX, resultY, 300, 550, 0xFFFFFF, 0xFFFFFF);
+
+            // --- Section 1: Extracted Colors (K items) ---
+            cvui::text(frame, resultX + 10, resultY + 10, "Extracted Colors (K-Means)", 0.6, 0x000000);
+
+            int colorY = resultY + 40;
+
+            for (size_t i = 0; i < extractedColors.size(); ++i) {
+
+                unsigned int hexInt = (extractedColors[i][2] << 16) | (extractedColors[i][1] << 8) | extractedColors[i][0];
+
+                cvui::rect(frame, resultX + 10, colorY, 40, 30, hexInt, hexInt);
+
+                std::string hexStr = bgrToHex(extractedColors[i]);
+                std::string label = (i == 0) ? hexStr + " (Main)" : hexStr;
+
+                cvui::text(frame, resultX + 60, colorY + 10, label.c_str(), 0.5, 0x333333);
+
+                colorY += 35;
+                if (i >= 9) break;
+            }
+
+            // --- Section 2: Recommended Palette ---
+            // Adjust Y position based on how many colors were drawn
+            int palStartY = colorY + 20;
+            cvui::text(frame, resultX + 10, palStartY, "Theme Recommendation", 0.6, 0x000000);
+            cvui::text(frame, resultX + 10, palStartY + 25, ("Theme: " + recommended.name).c_str(), 0.5, 0x555555);
+
+            int palY = palStartY + 50;
+            for (const auto& c : recommended.colors) {
+                unsigned int hexColor = (c[2] << 16) | (c[1] << 8) | c[0];
+
+                cvui::rect(frame, resultX + 10, palY, 120, 30, hexColor, hexColor);
+
+                std::string hexStr = bgrToHex(c);
+                cvui::text(frame, resultX + 140, palY + 10, hexStr.c_str(), 0.5, 0x333333);
+                palY += 40;
+            }
         }
-        std::cerr << "Using GrabCut foreground (" << fgPts.size() << " pixels, sampled " << samples.rows << ") for clustering" << std::endl;
-    } else {
-        cv::Mat reshaped = procImg.reshape(1, procImg.rows * procImg.cols);
-        reshaped.convertTo(samples, CV_32F);
-        samplePts.reserve(procImg.rows * procImg.cols);
-        for (int i = 0; i < procImg.rows * procImg.cols; ++i) {
-            int y = i / procImg.cols;
-            int x = i % procImg.cols;
-            samplePts.emplace_back(x, y);
+        else {
+            cvui::text(frame, PANEL_WIDTH + 250, 300, "Please Upload an Image", 1.0, 0xCCCCCC);
         }
-        if (!foregroundMask.empty())
-            std::cerr << "GrabCut produced too few pixels (" << fgPts.size() << "); falling back to whole processed image." << std::endl;
-        else
-            std::cerr << "GrabCut not used; falling back to whole processed image." << std::endl;
-    }
-}
 
-static void runKMeans(const cv::Mat &samples, int clusters_nb, int attempts, cv::Mat &labels, cv::Mat &centers)
-{
-    cv::kmeans(samples, clusters_nb, labels,
-           cv::TermCriteria(cv::TermCriteria::EPS+cv::TermCriteria::COUNT, 10, 1.0),
-           attempts, cv::KMEANS_PP_CENTERS, centers);
-}
-
-static cv::Vec3b selectDominant(const cv::Mat &centers, const cv::Mat &labels, const std::vector<cv::Point> &samplePts, int clusters_nb, const cv::Mat &procImg)
-{
-    std::vector<int> counts(clusters_nb,0);
-    for (int i = 0; i < labels.rows; ++i) counts[labels.at<int>(i,0)]++;
-
-    std::vector<cv::Point2d> centroids(clusters_nb, cv::Point2d(0,0));
-    std::vector<int> clusterCounts(clusters_nb, 0);
-    for (int i = 0; i < labels.rows; ++i) {
-        int lbl = labels.at<int>(i,0);
-        if (lbl < 0 || lbl >= clusters_nb) continue;
-        cv::Point p = samplePts.size() > (std::size_t)i ? samplePts[i] : cv::Point(0,0);
-        centroids[lbl].x += p.x;
-        centroids[lbl].y += p.y;
-        clusterCounts[lbl]++;
-    }
-    for (int i = 0; i < clusters_nb; ++i) {
-        if (clusterCounts[i] > 0) {
-            centroids[i].x /= clusterCounts[i];
-            centroids[i].y /= clusterCounts[i];
-        }
+        cvui::imshow(WINDOW_NAME, frame);
+        if (cv::waitKey(20) == 27) break;
     }
 
-    cv::Point2d center((double)procImg.cols/2.0, (double)procImg.rows/2.0);
-    int bestIdx = 0;
-    double bestScore = 1e300;
-
-    for (int i = 0; i < clusters_nb; ++i) {
-        double dist = std::hypot(centroids[i].x - center.x, centroids[i].y - center.y);
-        double countNorm = (clusterCounts[i] > 0) ? std::log((double)clusterCounts[i] + 1.0) : 0.0;
-        double score = (clusterCounts[i] > 0) ? dist / (1.0 + countNorm) : 1e300;
-        if (score < bestScore) {
-            bestScore = score;
-            bestIdx = i;
-        }
-    }
-
-    cv::Vec3b c;
-    c[0] = (uchar)centers.at<float>(bestIdx,0);
-    c[1] = (uchar)centers.at<float>(bestIdx,1);
-    c[2] = (uchar)centers.at<float>(bestIdx,2);
-    return c;
-}
-
-int main(int argc, char **argv)
-{
-    if (argc < 2) {
-        std::cerr << "Usage: ./" << argv[0] << " <image_path> <number of clusters(default 4)>" << std::endl;
-        return 1;
-    }
-
-    std::string path = argv[1];
-    int clusters_nb = 4;
-    if (argc >= 3)
-        clusters_nb = std::stoi(argv[2]);
-
-    cv::Mat img, procImg;
-    if (!loadAndPreprocess(path, img, procImg)) {
-        std::cerr << "Could not open or find the image: " << path << std::endl;
-        return 2;
-    }
-
-    cv::Mat samples;
-    std::vector<cv::Point> samplePts;
-    buildSamples(procImg, samples, samplePts);
-
-    cv::Mat labels, centers;
-    int attempts = 3;
-    runKMeans(samples, clusters_nb, attempts, labels, centers);
-
-    cv::Vec3b dominant = selectDominant(centers, labels, samplePts, clusters_nb, procImg);
-    std::cout << "dominant color = " << toHex(dominant) << "\n";
-
-    std::vector<cv::Vec3b> palette;
-    palette.push_back(dominant);
-    palette.push_back(shiftHue(dominant, -15));
-    palette.push_back(shiftHue(dominant, 15));
-    palette.push_back(shiftHue(dominant, 90));
-    palette.push_back(shiftHue(dominant, 60));
-    palette.push_back(shiftHue(dominant, -60));
-    palette.push_back(shiftHue(dominant, 0, 40));
-    palette.push_back(shiftHue(dominant, 0, -60));
-
-    std::vector<std::string> hexes;
-    checkDuplication(palette, hexes);
-    printResults(hexes);
     return 0;
 }
-
-    
