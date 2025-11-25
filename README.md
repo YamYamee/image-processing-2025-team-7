@@ -71,10 +71,10 @@ This guide assumes the use of Visual Studio 2019 or 2022.
 ### 2. Build Configuration
 
 1. Open the CMakeLists.txt file and verify that the OpenCV_DIR path matches your installation directory.
-
-   CMake
+   ```bash
    # Example
    set(OpenCV_DIR "C:/opencv/build")
+   ```
 
 2. Open the project folder in Visual Studio (Open as CMake Project).
 
