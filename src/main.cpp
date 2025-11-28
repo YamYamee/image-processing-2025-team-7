@@ -111,7 +111,7 @@ int main(int argc, char** argv) {
 
             // Use the most dominant color (index 0) for recommendation
             if (!extractedColors.empty()) {
-                recommended = matcher.recommendPalette(currentTheme, extractedColors[0]);
+                recommended = matcher.recommendPalette(currentTheme, extractedColors);
             }
 
             int resultX = PANEL_WIDTH + 20;

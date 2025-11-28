@@ -15,10 +15,9 @@ class PaletteMatcher {
 public:
     PaletteMatcher();
 
-    // Recommends a palette based on the selected theme and extracted dominant color
-    // Uses Euclidean distance for matching
-    ThemePalette recommendPalette(const std::string& theme, const cv::Vec3b& extractedColor);
-
+    // [Modified] Recommends a palette based on the selected theme and a list of extracted dominant colors
+    // Uses Euclidean distance to match the top 2 colors against palette colors for better accuracy
+    ThemePalette recommendPalette(const std::string& theme, const std::vector<cv::Vec3b>& extractedColors);
 private:
     // Database storing palettes for each theme (Fashion, Interior, Design)
     std::map<std::string, std::vector<ThemePalette>> database;
