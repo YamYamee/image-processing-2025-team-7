@@ -9,7 +9,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # =========================================================
 if(WIN32)
     # Windows: Set user-specific path (Keep your local path)
-    set(OpenCV_DIR "C:/Users/cartc/Downloads/opencv/build")
+    set(OpenCV_DIR "C:/Users/rkdmf/Downloads/opencv/build/x64/vc16/lib")
 else()
     # Linux: Usually installed in system paths, so manual path setting is often unnecessary.
     # (If needed, you can add set(OpenCV_DIR "/usr/local/share/opencv4") here)
@@ -39,3 +39,5 @@ else()
     # Linux: Link OpenCV only (File explorer logic handles differently or is excluded)
     target_link_libraries(SmartEyeDropper PRIVATE ${OpenCV_LIBS})
 endif()
+
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/palettes.json DESTINATION ${CMAKE_CURRENT_BINARY_DIR})

@@ -1,6 +1,7 @@
 #include "PaletteMatcher.h"
 #include <cmath>
 #include <limits>
+#include <iostream>
 
 PaletteMatcher::PaletteMatcher() {
     initDatabase();
@@ -34,25 +35,47 @@ ThemePalette PaletteMatcher::recommendPalette(const std::string& theme, const cv
 }
 
 void PaletteMatcher::initDatabase() {
-    // 1. Fashion Theme
-    std::vector<ThemePalette> fashion;
-    fashion.push_back({ "Classic Navy", {120, 50, 50}, {{120,50,50}, {200,200,200}, {50,50,150}, {100,100,100}} });
-    fashion.push_back({ "Spring Pastel", {180, 200, 255}, {{180,200,255}, {200,255,220}, {255,200,210}, {255,255,240}} });
-    fashion.push_back({ "Earthy Tone", {50, 100, 150}, {{50,100,150}, {80,130,180}, {40,80,120}, {200,210,220}} });
-    fashion.push_back({ "Monochrome", {30, 30, 30}, {{0,0,0}, {50,50,50}, {150,150,150}, {220,220,220}} });
-    database["Fashion"] = fashion;
+    std::string filename = "palettes.json";
+    cv::FileStorage fs(filename, cv::FileStorage::READ);
 
-    // 2. Interior Theme
-    std::vector<ThemePalette> interior;
-    interior.push_back({ "Cozy Wood", {30, 70, 120}, {{30,70,120}, {220,230,240}, {50,100,160}, {100,150,200}} });
-    interior.push_back({ "Modern Gray", {128, 128, 128}, {{128,128,128}, {50,50,50}, {200,200,200}, {255,255,255}} });
-    interior.push_back({ "Nordic Blue", {180, 150, 100}, {{180,150,100}, {230,230,230}, {100,80,60}, {200,180,160}} });
-    database["Interior"] = interior;
+    if (!fs.isOpened()) {
+        // If the file is not found, print an error (or fallback to hardcoded data)
+        std::cerr << "Warning: palettes.json not found!" << std::endl;
+        return;
+    }
 
-    // 3. Design Theme
-    std::vector<ThemePalette> design;
-    design.push_back({ "Professional Blue", {200, 100, 50}, {{200,100,50}, {240,240,240}, {50,50,50}, {100,50,0}} });
-    design.push_back({ "Vivid Pop", {50, 50, 200}, {{50,50,200}, {50,200,200}, {200,200,50}, {200,50,200}} });
-    design.push_back({ "Dark Mode", {20, 20, 20}, {{30,30,30}, {100,255,100}, {200,100,255}, {50,150,255}} });
-    database["Design"] = design;
+    std::vector<std::string> themes = { "Fashion", "Interior", "Design" };
+
+    for (const auto& themeName : themes) {
+        cv::FileNode themeNode = fs[themeName];
+        if (themeNode.type() != cv::FileNode::SEQ) continue;
+
+        std::vector<ThemePalette> paletteList;
+
+        for (auto it = themeNode.begin(); it != themeNode.end(); ++it) {
+            ThemePalette palette;
+            (*it)["name"] >> palette.name;
+
+            // Read Base Color (Convert RGB to BGR)
+            std::vector<int> rgb;
+            (*it)["base_color"] >> rgb;
+            if (rgb.size() >= 3) {
+                // Input is RGB(0,1,2) -> OpenCV uses BGR(2,1,0)
+                palette.baseColor = cv::Vec3b(rgb[2], rgb[1], rgb[0]);
+            }
+
+            // Read Palette Colors (Convert RGB to BGR)
+            cv::FileNode colorsNode = (*it)["colors"];
+            for (auto cIt = colorsNode.begin(); cIt != colorsNode.end(); ++cIt) {
+                std::vector<int> cVal;
+                (*cIt) >> cVal;
+                if (cVal.size() >= 3) {
+                    palette.colors.push_back(cv::Vec3b(cVal[2], cVal[1], cVal[0]));
+                }
+            }
+            paletteList.push_back(palette);
+        }
+        database[themeName] = paletteList;
+    }
+    fs.release();
 }
