@@ -114,7 +114,7 @@ int main(int argc, char** argv) {
                 recommended = matcher.recommendPalette(currentTheme, extractedColors);
             }
 
-            int resultX = PANEL_WIDTH + 20;
+            int resultX = frame.cols - 300 - 20;
             int resultY = 20;
 
             // Background box for results
